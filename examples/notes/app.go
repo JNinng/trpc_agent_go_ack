@@ -21,6 +21,8 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go/session"
 	"trpc.group/trpc-go/trpc-agent-go/session/inmemory"
 	"trpc.group/trpc-go/trpc-agent-go/session/postgres"
+	"trpc.group/trpc-go/trpc-agent-go/tool"
+	mcptoolset "trpc.group/trpc-go/trpc-agent-go/tool/mcp"
 
 	"github.com/jninng/trpc_agent_go_ack"
 	"github.com/jninng/trpc_agent_go_ack/ackhttp"
@@ -53,8 +55,11 @@ type App struct {
 	Gateway  *ack.Gateway    // 许可网关（live 唤醒 / recovery 续跑）
 	Sessions session.Service // 会话存储（内存或 PostgreSQL）
 	Handler  http.Handler    // 完整 HTTP 路由（前端 + /agui/* + /ack/* + /api/*）
+	MCPURL   string          // MCP 模式下工具服务的连接地址；function 模式为空
 
-	coreRunner runner.Runner // trpc-agent-go 核心 runner
+	coreRunner runner.Runner       // trpc-agent-go 核心 runner
+	mcpSrv     *notesMCPServer     // MCP 模式的工具服务（进程内起，独立监听）
+	mcpToolSet *mcptoolset.ToolSet // MCP 模式的客户端工具集
 }
 
 // New 按配置组装整个应用：会话存储 → 模型（真实模型或脚本化 mock）→
@@ -81,12 +86,41 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		)
 	}
 
-	ag := llmagent.New("notes-agent",
+	// 工具接入模式：function 为进程内直接调用；mcp 把同一批工具经
+	// MCP server（streamable HTTP）暴露再接入，工具名保持一致，层级
+	// 表、策略与许可配置两种模式完全复用，验证 ack 对 MCP 工具同管线。
+	staticTools := a.Notepad.Tools()
+	var toolOpts []llmagent.Option
+	switch cfg.ToolMode {
+	case "", "function":
+		toolOpts = append(toolOpts, llmagent.WithTools(staticTools))
+	case "mcp":
+		mcpSrv, err := startNotesMCP(a.Notepad)
+		if err != nil {
+			return nil, err
+		}
+		a.mcpSrv, a.MCPURL = mcpSrv, mcpSrv.URL
+
+		ts := mcptoolset.NewMCPToolSet(
+			mcptoolset.ConnectionConfig{Transport: "streamable", ServerURL: mcpSrv.URL},
+			mcptoolset.WithName(""), // 工具集名为空则不加前缀，模型可见工具名与 function 模式一致
+		)
+		if err := ts.Init(ctx); err != nil {
+			return nil, fmt.Errorf("init mcp tool set: %w", err)
+		}
+		a.mcpToolSet = ts
+		staticTools = ts.Tools(ctx)
+		toolOpts = append(toolOpts, llmagent.WithToolSets([]tool.ToolSet{ts}))
+	default:
+		return nil, fmt.Errorf("unknown tool mode %q (want \"function\" or \"mcp\")", cfg.ToolMode)
+	}
+
+	agOpts := append([]llmagent.Option{
 		llmagent.WithModel(llm),
 		llmagent.WithGlobalInstruction(instruction),
-		llmagent.WithTools(a.Notepad.Tools()),
-		llmagent.WithMaxToolIterations(8), // 拒绝后的重试兜底
-	)
+	}, toolOpts...)
+	agOpts = append(agOpts, llmagent.WithMaxToolIterations(8)) // 拒绝后的重试兜底
+	ag := llmagent.New("notes-agent", agOpts...)
 
 	a.coreRunner = runner.NewRunner(AppName, ag, runner.WithSessionService(svc))
 
@@ -99,8 +133,8 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 			"delete_note":    ack.TierConfirm,
 			"drop_all_notes": ack.TierDeny,
 		}),
-		ack.WithGrants(ack.MemoryGrants()), // 演示用内存许可源；业务可换自有存储
-		ack.WithStaticTools(a.Notepad.Tools()...),
+		ack.WithGrants(ack.MemoryGrants()),  // 演示用内存许可源；业务可换自有存储
+		ack.WithStaticTools(staticTools...), // 恢复路径代执行用（MCP 模式下为 MCP 工具）
 	}
 	if cfg.RiskPolicy {
 		gwOpts = append(gwOpts, ack.WithPolicies(riskPolicy{}))
@@ -144,10 +178,16 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 	return a, nil
 }
 
-// Close 释放后台资源：core runner、自有会话存储。
+// Close 释放后台资源：core runner、MCP 工具集与工具服务、自有会话存储。
 func (a *App) Close() {
 	if a.coreRunner != nil {
 		_ = a.coreRunner.Close()
+	}
+	if a.mcpToolSet != nil {
+		_ = a.mcpToolSet.Close()
+	}
+	if a.mcpSrv != nil {
+		_ = a.mcpSrv.Close()
 	}
 	// 通过 SessionServiceOverride 注入的会话存储归调用方所有
 	//（测试让两个 App 实例共享同一存储来模拟重启）。

@@ -32,6 +32,10 @@ pnpm install && pnpm build
 cd ../../..
 go run ./examples/notes
 # 打开 http://127.0.0.1:8080
+
+# 以 MCP 工具模式运行：自动启动 MCP server 并对接 agent
+#（启动日志打印 MCP 端点，外部 MCP 客户端可直连观察）
+go run ./examples/notes -mcp
 ```
 
 默认脚本演示完整许可闭环：读取 n1（allow 直行）→ 删除 n2（确认卡片）→ 删除 n3（勾选"记住授权"后免确认）→ 总结。
@@ -47,6 +51,8 @@ go run ./examples/notes
 | `NOTES_API_KEY` | 空 | 为空自动回退 mock；也读 `DEEPSEEK_API_KEY` |
 | `NOTES_BASE_URL` / `NOTES_MODEL` | DeepSeek | OpenAI 兼容接口与模型名 |
 | `NOTES_RISK_POLICY` | `0` | 置 `1` 启用 mock 风控策略源（演示强制确认/背书/deny 三形态） |
+
+命令标记：`-mcp` 启用 MCP 工具模式——自动启动 MCP server（streamable HTTP）并把同一批笔记工具原样接入 agent，验证 ack 对 MCP 工具同管线生效；默认 function 模式（进程内直接调用）。
 
 ### 示例端点
 

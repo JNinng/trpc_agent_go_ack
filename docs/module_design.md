@@ -133,7 +133,7 @@ ack/                      模块根，包 ack：网关构造、选项、对外�
 ├── doc.go                包文档：能力概述与接入指引
 ├── ackhttp/              HTTP 绑定：确认路由挂载（仅依赖标准库与 ack）
 ├── acktest/              测试夹具：脚本化模型（model.Model 实现）、假续跑 runner
-├── examples/notes/       端到端示例：笔记工具、层级配置、许可演示、Web 前端（Vue3，产物不入库，占位页 + go:embed）
+├── examples/notes/       端到端示例：笔记工具、层级配置、许可演示、Web 前端（Vue3，产物不入库，占位页 + go:embed）；工具接入双模式——function（进程内）与 mcp（同一批工具经 MCP server 以 streamable HTTP 接入），验证 §4.1 的同管线主张
 └── docs/                 事件契约与许可模型文档（前端/业务对接参考）
 ```
 
@@ -377,6 +377,7 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 **示例工程验收（examples）**
 
 - 允许层级直接执行、确认层级出卡片、remember 后同会话免确认、实时确认卡片、历史回放、页面刷新恢复、服务重启恢复端到端通过（重启恢复以 Linux 为准，Windows 偶发竞态见 D4）；deny 层级不可降级与策略源三形态（强制确认、背书、deny 判定）有演示场景。
+- 工具接入双模式（function / MCP）在核心场景（allow 直行、确认出卡、deny 拒绝、remember 免确认、重启恢复代执行）下行为一致，有 MCP 模式对比测试。
 
 ## 13. 版本与兼容性
 

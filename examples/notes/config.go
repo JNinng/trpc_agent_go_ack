@@ -20,7 +20,8 @@ type Config struct {
 	BaseURL   string // OpenAI 兼容接口地址
 	ModelName string // 模型名
 
-	RiskPolicy bool // 启用 mock 风控策略源（演示强制确认/背书/deny 三形态）
+	RiskPolicy bool   // 启用 mock 风控策略源（演示强制确认/背书/deny 三形态）
+	ToolMode   string // 工具接入模式："function"（默认）| "mcp"；由 -mcp 命令标记设置
 
 	// 以下为测试专用钩子，不从环境变量读取。
 	MockScript             []acktest.Step  // 注入 mock 模型的脚本步骤

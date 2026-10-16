@@ -38,12 +38,19 @@ func deleteScript() []acktest.Step {
 // newTestApp 用内存会话存储与脚本化模型组装测试应用，并启动 httptest 服务。
 func newTestApp(t *testing.T, svc session.Service, script []acktest.Step) (*App, *httptest.Server) {
 	t.Helper()
+	return newTestAppMode(t, svc, script, "function")
+}
+
+// newTestAppMode 同 newTestApp，但可指定工具接入模式（"function" | "mcp"）。
+func newTestAppMode(t *testing.T, svc session.Service, script []acktest.Step, toolMode string) (*App, *httptest.Server) {
+	t.Helper()
 	if svc == nil {
 		svc = inmemory.NewSessionService()
 	}
 	cfg := Config{
 		SessionBackend:         "memory",
 		LLM:                    "mock",
+		ToolMode:               toolMode,
 		MockScript:             script,
 		SessionServiceOverride: svc,
 	}
@@ -634,4 +641,150 @@ func TestSessionListAndDelete(t *testing.T) {
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+// ---- MCP 工具模式 ----
+//
+// 以下测试把同一批场景在 NOTES_TOOL_MODE=mcp 下重放：工具经进程内
+// MCP server（streamable HTTP）执行，ack 许可网关的层级评估、人工
+// 确认、remember 许可与恢复路径代执行对 MCP 工具与 function 工具
+// 行为一致。差异仅在工具执行结果的外层形状：MCP 结果包裹为文本内
+// 容数组（如 [{"type":"text","text":"{\"deleted\":true,...}"}]），
+// 而拒绝结果由框架在工具边界之前合成，形状与 function 模式相同。
+
+// TestMCPModeFullScriptTiersAndRemember 在 MCP 模式下验证完整许可闭环：
+// allow 层级直接执行、confirm 层级出卡片、remember 后同会话免确认。
+func TestMCPModeFullScriptTiersAndRemember(t *testing.T) {
+	a, ts := newTestAppMode(t, nil, defaultScript(), "mcp")
+	if a.MCPURL == "" {
+		t.Fatal("mcp mode should expose the tool server url")
+	}
+
+	s := postSSE(t, ts.URL, "/agui", chatInput("t-mcp-full", "处理笔记"))
+	// 第一张卡片：delete n2（read n1 已按 allow 层级直接执行）。
+	pending := pendingConfirmation(t, s)
+	if id := confirmationID(pending); id != "call_2" {
+		t.Fatalf("first confirmation should be delete n2, got %v", pending)
+	}
+	// 同意并记住（会话级）。
+	code, body := decideConfirmation(t, ts.URL, "t-mcp-full", "call_2", true, "session")
+	if code != http.StatusOK || body["path"] != ack.PathLive {
+		t.Fatalf("decide: %d %v", code, body)
+	}
+	s.waitEvent(t, 10*time.Second, "RUN_FINISHED", eventPred("RUN_FINISHED"))
+
+	// 整个流只出现一张待确认卡片（delete n3 经许可直接放行）。
+	if n := countEvents(s, func(ev map[string]any) bool {
+		if ev["type"] != "CUSTOM" || ev["name"] != ack.EventName {
+			return false
+		}
+		v, _ := ev["value"].(map[string]any)
+		return v != nil && v["status"] == ack.StatusPending
+	}); n != 1 {
+		t.Fatalf("expected exactly one pending confirmation card, got %d", n)
+	}
+	if n := countEvents(s, eventPred("TOOL_CALL_RESULT")); n != 3 {
+		t.Fatalf("expected three tool results, got %d", n)
+	}
+	// 执行痕迹与 function 模式完全一致：工具真正经 MCP 执行。
+	if got := a.Notepad.Reads; len(got) != 1 || got[0] != "n1" {
+		t.Fatalf("expected n1 read, got %v", got)
+	}
+	if got := a.Notepad.Deleted; len(got) != 2 || got[0] != "n2" || got[1] != "n3" {
+		t.Fatalf("expected n2,n3 deleted, got %v", got)
+	}
+	// 工具结果为 MCP 文本内容包裹的 JSON。
+	sawResult := false
+	for _, ev := range s.snapshot() {
+		if ev["type"] != "TOOL_CALL_RESULT" {
+			continue
+		}
+		if c, _ := ev["content"].(string); strings.Contains(c, `{\"deleted\":true`) {
+			sawResult = true
+		}
+	}
+	if !sawResult {
+		t.Fatalf("expected MCP-wrapped tool result, events:\n%s", s.raw())
+	}
+}
+
+// TestMCPModeDenyTierRefused 在 MCP 模式下验证 deny 层级不可降级：
+// 拒绝由框架在工具边界之前合成（形状与 function 模式一致），MCP 工具
+// 永远不会被调用。
+func TestMCPModeDenyTierRefused(t *testing.T) {
+	a, ts := newTestAppMode(t, nil, []acktest.Step{
+		{ToolCalls: []acktest.ToolCallSpec{{ID: "call_drop", Name: "drop_all_notes", Args: `{}`}}},
+		{Text: "被拒绝了"},
+	}, "mcp")
+
+	s := postSSE(t, ts.URL, "/agui", chatInput("t-mcp-deny", "全删"))
+	s.waitEvent(t, 10*time.Second, "RUN_FINISHED", eventPred("RUN_FINISHED"))
+
+	if n := countEvents(s, func(ev map[string]any) bool {
+		return ev["type"] == "CUSTOM" && ev["name"] == ack.EventName
+	}); n != 0 {
+		t.Fatal("deny tier must not produce a confirmation card")
+	}
+	sawDenied := false
+	for _, ev := range s.snapshot() {
+		if ev["type"] == "TOOL_CALL_RESULT" {
+			if c, _ := ev["content"].(string); strings.Contains(c, `"status":"denied"`) {
+				sawDenied = true
+			}
+		}
+	}
+	if !sawDenied {
+		t.Fatalf("expected denied tool result, events:\n%s", s.raw())
+	}
+	if a.Notepad.Dropped {
+		t.Fatal("deny tier tool must never execute")
+	}
+}
+
+// TestMCPModeRestartRecovery 在 MCP 模式下验证服务重启恢复：恢复路径
+// 经网关的工具解析器代执行 MCP 工具，并以 RoleTool 消息拉起续跑。
+func TestMCPModeRestartRecovery(t *testing.T) {
+	svc := inmemory.NewSessionService()
+	a1, ts1 := newTestAppMode(t, svc, deleteScript(), "mcp")
+
+	chat := postSSE(t, ts1.URL, "/agui", chatInput("t-mcp-restart", "删除 n2"))
+	pending := pendingConfirmation(t, chat)
+	id := confirmationID(pending)
+	chat.close() // 原客户端已断开
+
+	// 模拟"重启"：同一会话存储之上的全新 App 实例（含全新的 MCP 工具服务）。
+	a2, ts2 := newTestAppMode(t, svc, deleteScript(), "mcp")
+
+	code, pendings := getJSON(t, ts2.URL+"/ack/confirmations?threadId=t-mcp-restart")
+	if code != http.StatusOK {
+		t.Fatalf("pending query: %d %v", code, pendings)
+	}
+	if len(pendings) != 1 || pendings[0]["live"] != false {
+		t.Fatalf("expected one orphan pending, got %v", pendings)
+	}
+
+	decideCode, decideBody := decideConfirmation(t, ts2.URL, "t-mcp-restart", id, true, "")
+	if decideCode != http.StatusOK || decideBody["path"] != ack.PathRecovery {
+		t.Fatalf("confirm expected recovery, got %d %v", decideCode, decideBody)
+	}
+
+	// 快照轮询直到续跑完成；代执行结果由 a2 的 MCP 工具产生。
+	pollHistorySnapshot(t, ts2.URL, "t-mcp-restart", "resumed run result", func(raw string) bool {
+		return strings.Contains(raw, "操作已完成")
+	})
+	if got := a2.Notepad.Deleted; len(got) != 1 || got[0] != "n2" {
+		t.Fatalf("recovery should proxy-execute the mcp tool on the new app, got %v", got)
+	}
+
+	afterCode, after := getJSON(t, ts2.URL+"/ack/confirmations?threadId=t-mcp-restart")
+	if afterCode != http.StatusOK || len(after) != 0 {
+		t.Fatalf("pending should be cleared after resume, got %d %v", afterCode, after)
+	}
+
+	// 释放 app1 中仍阻塞的运行，让其 SSE 处理器在测试服务清理等待前退出。
+	if _, err := a1.Gateway.Decide(context.Background(), ack.Decision{
+		SessionID: "t-mcp-restart", ConfirmationID: id, Approved: false,
+	}); err != nil {
+		t.Fatalf("release app1 run: %v", err)
+	}
 }

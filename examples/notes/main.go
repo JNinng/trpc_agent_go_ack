@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,9 +12,16 @@ import (
 )
 
 // main 解析配置、组装应用并启动 HTTP 服务，监听 SIGINT 优雅退出。
-// LLM 为 mock 或未配置 API Key 时启用默认脚本，保证离线可演示。
+// LLM 为 mock 或未配置 API Key 时启用默认脚本，保证离线可演示；
+// -mcp 标记自动启动 MCP server 并以 MCP 工具模式对接。
 func main() {
+	mcpMode := flag.Bool("mcp", false, "自动启动 MCP server 并对接（MCP 工具模式；默认 function 模式）")
+	flag.Parse()
+
 	cfg := FromEnv()
+	if *mcpMode {
+		cfg.ToolMode = "mcp"
+	}
 	if cfg.LLM == "mock" || cfg.APIKey == "" {
 		cfg.MockScript = DefaultMockScript()
 	}
@@ -30,7 +38,10 @@ func main() {
 
 	slog.Info("notes example listening",
 		"addr", cfg.Addr, "backend", cfg.SessionBackend, "llm", cfg.LLM,
-		"riskPolicy", cfg.RiskPolicy)
+		"riskPolicy", cfg.RiskPolicy, "toolMode", cfg.ToolMode)
+	if a.MCPURL != "" {
+		slog.Info("mcp tool server", "url", a.MCPURL)
+	}
 	slog.Info("endpoints: / (web) | POST /agui | POST /agui/history | POST /agui/cancel | " +
 		"POST /ack/confirmation | GET /ack/confirmations | GET /api/sessions")
 
