@@ -61,11 +61,16 @@ type options struct {
 	defaultTier Tier
 	tiers       map[string]Tier
 	tierFunc    func(ctx context.Context, call ToolCall) Tier
-	policies    []PolicySource
-	grants      GrantSource
-	tools       ToolResolver
-	denyText    func(call ToolCall) string
-	logger      *slog.Logger
+	// namedPolicies 与 policies 是咨询链的两段输入，New 时合成为
+	// chain：具名源在前、匿名源在后，各段保持注册次序。
+	namedPolicies []NamedPolicy
+	policies      []PolicySource
+	chain         []namedSource
+	grants        GrantSource
+	tools         ToolResolver
+	denyText      func(call ToolCall) string
+	observer      PermissionObserver
+	logger        *slog.Logger
 }
 
 // Option 配置 Gateway。
@@ -105,9 +110,25 @@ func WithTierFunc(fn func(ctx context.Context, call ToolCall) Tier) Option {
 	return func(o *options) { o.tierFunc = fn }
 }
 
-// WithPolicies 设置策略源链，每次工具调用逐个同步咨询。
+// WithPolicies 设置匿名策略源，每次工具调用逐个同步咨询；与
+// WithNamedPolicies 合成一条咨询链（具名源在前、匿名源在后），匿名
+// 登记不产生授权终态事件的 Source。
 func WithPolicies(src ...PolicySource) Option {
 	return func(o *options) { o.policies = src }
+}
+
+// WithNamedPolicies 设置具名策略源，名字进入授权终态事件的 Source
+// 字段，标明生效依据来自哪个外部裁决系统；与 WithPolicies 合成一条
+// 咨询链（具名源在前、匿名源在后）。空名字视同匿名。
+func WithNamedPolicies(ps ...NamedPolicy) Option {
+	return func(o *options) { o.namedPolicies = ps }
+}
+
+// WithPermissionObserver 设置授权终态观察者，订阅全部自动授权终态；
+// 人工决定不通知，归宿主 Decide 路由审计。缺省 nil 零行为，
+// 调用契约见 PermissionObserver。
+func WithPermissionObserver(ob PermissionObserver) Option {
+	return func(o *options) { o.observer = ob }
 }
 
 // WithGrants 设置许可源；缺省时许可评估视为永不命中，Remember 被忽略。
@@ -156,6 +177,24 @@ func New(svc session.Service, opts ...Option) *Gateway {
 			opt(o)
 		}
 	}
+	// 合成咨询链：具名源在前、匿名源在后，各段保持注册次序——首个
+	// deny / 首个 allow 的来源归属依赖此次序。空源登记告警并跳过。
+	chain := make([]namedSource, 0, len(o.namedPolicies)+len(o.policies))
+	for _, np := range o.namedPolicies {
+		if np.Source == nil {
+			o.logger.Warn("nil named policy source, skipped", "name", np.Name)
+			continue
+		}
+		chain = append(chain, namedSource{src: np.Source, name: np.Name})
+	}
+	for _, src := range o.policies {
+		if src == nil {
+			o.logger.Warn("nil anonymous policy source, skipped")
+			continue
+		}
+		chain = append(chain, namedSource{src: src})
+	}
+	o.chain = chain
 	return &Gateway{
 		opts:     o,
 		sessions: svc,

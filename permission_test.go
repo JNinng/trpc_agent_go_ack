@@ -40,11 +40,11 @@ func newEvalGateway(t *testing.T, tier Tier, policies []PolicySource, grants Gra
 // mustDisposition 评估并断言处置与依据。
 func mustDisposition(t *testing.T, g *Gateway, wantD disposition, wantBasis string) {
 	t.Helper()
-	d, basis := g.evaluate(context.Background(), evalCall)
+	d, basis, _ := g.evaluate(context.Background(), evalCall)
 	if d != wantD {
 		t.Fatalf("disposition = %v (%s), want %v", d, basis, wantD)
 	}
-	if basis != wantBasis {
+	if string(basis) != wantBasis {
 		t.Fatalf("basis = %q, want %q", basis, wantBasis)
 	}
 }

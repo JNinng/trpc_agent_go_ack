@@ -80,6 +80,8 @@
 | confirm | allow | — | 放行（背书） |
 | deny | 任意 | 任意 | 拒绝 |
 
+策略源经咨询链逐个同步咨询：具名源（`WithNamedPolicies`）在前、匿名源（`WithPolicies`）在后，各段保持注册次序。处置与咨询顺序无关，但首个 deny / 首个 allow 的来源归属依赖此次序，来源名进入授权终态事件（§7.5）。
+
 ### 4.2 规则性质
 
 - **确定性**：处置是（层级、判定集、许可表）的纯函数，与策略源顺序无关。
@@ -123,7 +125,7 @@
 ```
 ack/                      模块根，包 ack：网关构造、选项、对外方法
 ├── ack.go                Options 与 New、Gateway 生命周期
-├── permission.go         层级、判定、许可评估与合成规则
+├── permission.go         层级、判定、许可评估与授权终态观察类型
 ├── policy.go             框架权限策略适配：评估入口，确认流登记等待者并阻塞
 ├── confirm.go            Decide / Pending 及其请求、结果类型
 ├── recovery.go           恢复路径：历史还原、代执行、续跑
@@ -155,7 +157,9 @@ func New(svc session.Service, opts ...Option) *Gateway
 | `WithDefaultTier(t)` | `TierAllow` | 未分级工具的层级 |
 | `WithTiers(m)` | 无 | 按工具名静态分级（`map[string]Tier`） |
 | `WithTierFunc(fn)` | 无 | 动态分级：`fn(ctx, ToolCall) Tier`，可依据入参分类；优先于静态表，静态表优先于默认层级 |
-| `WithPolicies(src...)` | 无 | 策略源链，每次工具调用逐个同步咨询 |
+| `WithPolicies(src...)` | 无 | 匿名策略源，每次工具调用逐个同步咨询 |
+| `WithNamedPolicies(ps...)` | 无 | 具名策略源，名字进入授权终态事件的 `Source`；与 `WithPolicies` 合成咨询链（具名在前、匿名在后），空名字视同匿名 |
+| `WithPermissionObserver(ob)` | nil | 授权终态观察者，订阅全部自动授权终态（人工决定不通知）；调用契约见 §7.5 |
 | `WithGrants(gs)` | 无 | 许可源；缺省时评估步 5 视为永不命中，Remember 被忽略 |
 | `WithTools(res)` | 无 | 工具解析器：裁决时刻返回 `map[string]tool.CallableTool`，供恢复路径代执行；缺省时同意的孤儿确认降级为"工具不可用"拒绝 |
 | `WithStaticTools(tools...)` | 无 | `WithTools` 的静态糖 |
@@ -182,6 +186,12 @@ type ToolCall struct {
 // PolicySource 是外部裁决系统（如风控）的接入点
 type PolicySource interface {
     Consult(ctx context.Context, call ToolCall) (Verdict, error)
+}
+
+// NamedPolicy 是带名字的策略源：名字进入授权终态事件的 Source
+type NamedPolicy struct {
+    Name   string
+    Source PolicySource
 }
 
 // 许可
@@ -257,6 +267,27 @@ type DecideResult struct {
 
 HTTP 层依据哨兵错误映射状态码，不解析错误字符串。
 
+### 7.5 授权终态观察
+
+```go
+// Basis 是授权终态的生效依据词表
+type Basis string // tier | verdict | endorsement | grant | duplicate | canceled | persist-failed
+
+type PermissionEvent struct {
+    Call    ToolCall // 发生授权的调用视图
+    Allowed bool     // 终态是否放行
+    Basis   Basis    // 生效依据
+    Source  string   // 生效具名策略源名；非策略依据与匿名源为空
+}
+
+type PermissionObserver func(ctx context.Context, event PermissionEvent)
+```
+
+- 互斥覆盖：每次工具调用恰好一条授权终态——要么一条 `PermissionEvent`，要么一次 Decide 结算（live 唤醒与 recovery 代执行均是），二者互斥且共同覆盖全部调用；人工决定由宿主在 Decide 自身的路由与日志中审计。
+- `Source` 口径：`verdict` / `endorsement` 时为首个生效具名策略源的名字，其余依据（tier / grant / duplicate / canceled / persist-failed）与匿名策略源为空；策略源咨询出错 fail-safe 进入确认的调用若以 `canceled` 结算，事件不携带出错源名字（细节在日志）。
+- 调用方式：网关在授权流程结束的同步路径上回调，回调应快速返回，重负载外报由宿主异步化；回调 ctx 经 `context.WithoutCancel` 处理、保证未取消（取消/超时终态亦然），回调内可安全执行 IO；回调无返回值，观察不改变授权结论。
+- 范围：`PolicyFor` 的防御性放行（无调用标识的请求）不在观察契约内。
+
 ## 8. 对外契约
 
 ### 8.1 AG-UI 事件契约（前端对接）
@@ -301,7 +332,7 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 
 - 键：`Session.State["__pending_tool_confirmation__"]`（`StateKey`）。
 - 值：JSON 对象 `{"<confirmationID>": Payload}`。
-- 写入时机：进入等待前（先持久化后阻塞）；清除时机：决定结算、运行终止清理、会话删除。
+- 写入时机：进入等待前（先持久化后阻塞）；清除时机：决定结算、运行终止清理、会话删除。清除失败时残留孤儿指针（记 Error 日志），其后的人工决定按恢复路径既定语义结算（I13）。
 - 读写模式：网关锁内 read-modify-write，单进程下串行一致。
 
 `StateKey` 与事件名是存储/wire 兼容键：升级只增不改，否则遗留待确认指针失联、前端配对失效。
@@ -335,6 +366,7 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 | I13 | 孤儿判定以存储为准：无存活等待者时查待确认指针，存在走恢复路径，不存在返回 `ErrNotFound`。 |
 | I14 | 网关不拥有会话存储、许可源与 runner 的生命周期，三者由业务构造与关闭。 |
 | I15 | 网关的 AppName/User 须与 AG-UI runner 同名配置一致，否则会话定位失败。 |
+| I16 | 每次工具调用恰好一条授权终态：自动终态产生一条 `PermissionEvent`，人工决定经 Decide 结算，二者互斥。取消与决定并发时先认领结算权者生效：决定生效则零事件、取消生效则决定返回 `ErrNotFound` 且恰一条 canceled 事件。 |
 
 ## 10. 依赖与部署约束
 
@@ -349,7 +381,8 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 
 ## 11. 可观测性
 
-- 结构化日志（`slog`），事件域覆盖：许可评估结果（含命中步骤与依据）、策略源咨询错误、许可写入失败、确认登记、持久化失败、决定结算、恢复路径降级、续跑启动失败。
+- 结构化日志（`slog`），事件域覆盖：许可评估结果（含命中步骤与依据）、策略源咨询错误（含来源名）、许可写入失败、确认登记、持久化失败、决定结算、恢复路径降级、续跑启动失败。
+- 授权终态经 `WithPermissionObserver` 外报宿主（同步回调，契约见 §7.5），人工决定归宿主在 Decide 路由中审计。
 - 确认全生命周期经 AG-UI track 持久化，历史回放即审计轨迹；放行与拒绝路径经标准工具事件与 denied 结果形状可见。
 - 库内不引入 metrics 依赖；业务可按需采集 `Decide` 返回的 Path 做路径分布统计。
 
@@ -369,6 +402,12 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 - 恢复路径：孤儿同意代执行并续跑、孤儿拒绝合成结果、历史缺失降级拒绝、未 Bind 报 `ErrNotBound`。
 - 并发：同一确认并发决定竞争（I11）。
 - 错误：哨兵错误的 `errors.Is` 判定。
+
+**授权终态观察（单元测试，经 `PolicyFor` 直接驱动）**
+
+- 观察契约全场景（§7.5）：分级放行/拦截、判定拒绝、背书、许可命中、评估层确认不通知、Decide 结算不通知、重复 ID、持久化失败、取消结算。
+- 来源归属：多源时事件 `Source` 为首个生效具名源、匿名源与空名具名源为空、咨询链具名在前匿名在后。
+- 互斥不变量（I16）：取消与决定并发时决定优先，恰好一条终态；观察者缺省 nil 零行为；回调 ctx 保证未取消。
 
 **HTTP 集成测试（ackhttp）**
 

@@ -41,7 +41,7 @@ func (g *Gateway) Decide(ctx context.Context, d Decision) (DecideResult, error) 
 		decidedBy = uid
 	}
 
-	w, ok := g.beginSettle(d.SessionID, d.ConfirmationID)
+	w, ok := g.beginSettle(d.SessionID, d.ConfirmationID, nil)
 	if !ok {
 		return DecideResult{}, ErrNotFound
 	}
@@ -155,10 +155,13 @@ func (g *Gateway) rememberGrant(ctx context.Context, uid, decidedBy string, d De
 	}
 }
 
-// beginSettle 原子地认领一次确认的结算权：取出存活等待者（如有），
-// 并登记 settling 防止并发决定双重结算。返回 ok=false 表示已有并发
-// 结算在进行，后到者生效为 ErrNotFound。
-func (g *Gateway) beginSettle(sessionID, confirmationID string) (*waiter, bool) {
+// beginSettle 原子地认领一次确认的结算权：登记 settling 防止并发结算
+// 双重结算，并按身份摘除等待者——self 为 nil 时摘除当前登记者（Decide
+// 结算任意存活等待者）；self 非 nil 时仅当登记者正是该等待者才摘除
+// （操作性结算的身份校验，防止误摘同 ID 后到的新等待者）。返回被摘除
+// 的等待者（可能为 nil）；ok=false 表示结算权被占，后到者生效为
+// ErrNotFound。
+func (g *Gateway) beginSettle(sessionID, confirmationID string, self *waiter) (*waiter, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	k := waiterKey(sessionID, confirmationID)
@@ -166,9 +169,11 @@ func (g *Gateway) beginSettle(sessionID, confirmationID string) (*waiter, bool) 
 		return nil, false
 	}
 	g.settling[k] = struct{}{}
-	w := g.waiters[k]
-	delete(g.waiters, k)
-	return w, true
+	current := g.waiters[k]
+	if self == nil || current == self {
+		delete(g.waiters, k)
+	}
+	return current, true
 }
 
 // endSettle 释放结算权。
