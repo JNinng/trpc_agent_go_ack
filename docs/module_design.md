@@ -381,6 +381,7 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 | D4 | 上游 trpc-agent-go（截至 v1.11.2）的 TrackEvent 未保证时间戳严格单调：AG-UI history follow 以"严格大于游标"过滤事件，时间戳并列会使同簇后续事件（含运行结束信号）被永久跳过。本库直依赖官方发布、不做 replace：该缺陷只影响前端 follow 消费（库自身不消费 follow 流），缓解下沉到示例层——前端在 recovery 决定后延时再开 history follow，Go 集成测试以快照轮询断言、不依赖 follow 自然终止（对 D4 免疫）；Windows 粗时钟下快照切簇竞态偶发，验收以 Linux 为准。彻底消除需 fork + replace（逃生舱）；上游修复发布后移除示例缓解并回归本条。 |
 | D5 | 无 CGO 依赖；会话后端由业务自选（框架 inmemory / postgres 等）。 |
 | D6 | 策略源咨询与许可查询位于工具调用的同步关键路径：源应低延迟或由业务侧缓存；源错误按 fail-safe 升级为确认处理。 |
+| D7 | 上游 trpc-mcp-go（截至 v0.0.19）streamable 客户端的 GET SSE goroutine 建连期间读取 sessionID，与 POST 响应处理中的写入无同步（streamable_client.go）：`go test -race ./...` 多包并行负载下偶发数据竞争。本库不经此路径（直依赖不含 MCP），缓解下沉到示例层——MCP 客户端经 `WithClientGetSSEEnabled(false)` 关闭 GET SSE，示例的 MCP 用法只走 POST 工具调用、不消费服务端主动推送，行为不变；上游修复发布后移除该选项并回归本条。 |
 
 ## 11. 可观测性
 
