@@ -15,7 +15,7 @@ type Config struct {
 	SessionBackend string // 会话存储后端："memory" | "postgres"
 	PostgresDSN    string // PostgreSQL 连接串（backend=postgres 时使用）
 
-	LLM       string // 模型提供方："deepseek" | "mock"
+	LLM       string // "mock" 走脚本化模型；其余值按 OpenAI 兼容接口接入（默认 deepseek）
 	APIKey    string // 模型 API Key；为空时自动回退到脚本化 mock 模型
 	BaseURL   string // OpenAI 兼容接口地址
 	ModelName string // 模型名
