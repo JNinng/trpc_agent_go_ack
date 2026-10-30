@@ -9,7 +9,7 @@ require (
 	trpc.group/trpc-go/trpc-agent-go v1.11.2
 	trpc.group/trpc-go/trpc-agent-go/server/agui v1.11.0
 	trpc.group/trpc-go/trpc-agent-go/session/postgres v1.11.0
-	trpc.group/trpc-go/trpc-mcp-go v0.0.10
+	trpc.group/trpc-go/trpc-mcp-go v0.0.19
 )
 
 require (
