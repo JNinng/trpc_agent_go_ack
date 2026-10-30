@@ -166,7 +166,7 @@ func New(svc session.Service, opts ...Option) *Gateway
 | `WithGrants(gs)` | 无 | 许可源；缺省时评估步 5 视为永不命中，Remember 被忽略 |
 | `WithTools(res)` | 无 | 工具解析器：裁决时刻返回 `map[string]tool.CallableTool`，供恢复路径代执行；缺省时同意的孤儿确认降级为"工具不可用"拒绝 |
 | `WithStaticTools(tools...)` | 无 | `WithTools` 的静态糖 |
-| `WithDenyText(fn)` | 内置文案 | 拒绝时返回给模型的提示文案生成器；默认文案含"不得重试"指令 |
+| `WithDenyTexts(t)` | 内置文案 | 各类拒绝文案的分组定制入口（`DenyTexts`）；零值字段保持默认（英文、含"不得重试"指令） |
 | `WithLogger(*slog.Logger)` | `slog.Default()` | 结构化日志 |
 
 `Gateway` 并发安全，可被多个 goroutine 同时调用。
@@ -345,7 +345,7 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 拒绝（层级 `deny`、策略 `deny` 判定、人工拒绝、运行终止）与失败（工具不可用、执行失败）统一以对齐框架 `tool.PermissionResult` 的 JSON 形状返回给模型：
 
 ```json
-{"status": "denied", "tool": "delete_note", "reason": "用户已拒绝执行该工具，不要再次调用该工具"}
+{"status": "denied", "tool": "delete_note", "reason": "User denied the execution of tool delete_note. Do not call this tool again."}
 ```
 
 同意的孤儿确认代执行后，工具结果 JSON 序列化为 RoleTool 消息内容。直接路径拒绝（权限策略拒绝）与恢复路径拒绝（续跑运行中的拒绝结果）形状一致，模型理解无差异。

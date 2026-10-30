@@ -33,7 +33,7 @@ func (g *Gateway) PolicyFor(sessionID string) tool.PermissionPolicyFunc {
 		switch d {
 		case dispositionDeny:
 			g.observe(ctx, call, false, basis, source)
-			return tool.DenyPermission(tierDenyReason(call.ToolName)), nil
+			return tool.DenyPermission(g.opts.denyTexts.TierDisabled(call.ToolName)), nil
 		case dispositionAllow:
 			g.observe(ctx, call, true, basis, source)
 			return tool.AllowPermission(), nil
@@ -93,7 +93,7 @@ func (g *Gateway) awaitConfirmation(ctx context.Context, call ToolCall) (tool.Pe
 	}); err != nil {
 		g.opts.logger.Error("persist pending confirmation failed",
 			"sessionId", call.SessionID, "confirmationId", p.ConfirmationID, "error", err)
-		return g.settleOperational(ctx, uid, call, w, BasisPersistFailed, persistDenyReason)
+		return g.settleOperational(ctx, uid, call, w, BasisPersistFailed, g.opts.denyTexts.PersistFailed)
 	}
 	g.opts.logger.Info("confirmation registered",
 		"sessionId", call.SessionID, "confirmationId", p.ConfirmationID, "tool", call.ToolName)
@@ -112,7 +112,7 @@ func (g *Gateway) awaitConfirmation(ctx context.Context, call ToolCall) (tool.Pe
 		return g.decisionToResult(call, approved)
 	case <-ctx.Done():
 		// 运行被取消或超时：清理内存等待者与持久化指针后按拒绝返回。
-		return g.settleOperational(ctx, uid, call, w, BasisCanceled, cancelDenyReason)
+		return g.settleOperational(ctx, uid, call, w, BasisCanceled, g.opts.denyTexts.Canceled)
 	}
 }
 
@@ -158,7 +158,7 @@ func (g *Gateway) decisionToResult(call ToolCall, approved bool) (tool.Permissio
 	if approved {
 		return tool.AllowPermission(), nil
 	}
-	return tool.DenyPermission(g.opts.denyText(call)), nil
+	return tool.DenyPermission(g.opts.denyTexts.HumanDenied(call)), nil
 }
 
 // observe 在授权终态处回调观察者；缺省 nil 零行为。回调 ctx 经

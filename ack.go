@@ -68,7 +68,7 @@ type options struct {
 	chain         []namedSource
 	grants        GrantSource
 	tools         ToolResolver
-	denyText      func(call ToolCall) string
+	denyTexts     DenyTexts
 	observer      PermissionObserver
 	logger        *slog.Logger
 }
@@ -148,10 +148,10 @@ func WithStaticTools(tools ...tool.Tool) Option {
 	return func(o *options) { o.tools = staticToolResolver(tools) }
 }
 
-// WithDenyText 自定义人工拒绝时返回给模型的提示文案；默认文案含
-// "不得重试"指令，自定义文案须自行保留该约束。
-func WithDenyText(fn func(call ToolCall) string) Option {
-	return func(o *options) { o.denyText = fn }
+// WithDenyTexts 定制各类拒绝时返回给模型的文案（见 DenyTexts）；
+// 零值字段保持默认文案（英文、含"不得重试"指令）。
+func WithDenyTexts(t DenyTexts) Option {
+	return func(o *options) { o.denyTexts = t }
 }
 
 // WithLogger 设置结构化日志器（默认 slog.Default()）。
@@ -169,13 +169,28 @@ func New(svc session.Service, opts ...Option) *Gateway {
 		app:         "ack",
 		user:        "user",
 		defaultTier: TierAllow,
-		denyText:    defaultDenyText,
 		logger:      slog.Default(),
 	}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(o)
 		}
+	}
+	// 归一化拒绝文案：未定制的类别回落默认值，调用点无需判空。
+	if o.denyTexts.HumanDenied == nil {
+		o.denyTexts.HumanDenied = defaultDenyText
+	}
+	if o.denyTexts.TierDisabled == nil {
+		o.denyTexts.TierDisabled = tierDenyReason
+	}
+	if o.denyTexts.Canceled == "" {
+		o.denyTexts.Canceled = cancelDenyReason
+	}
+	if o.denyTexts.PersistFailed == "" {
+		o.denyTexts.PersistFailed = persistDenyReason
+	}
+	if o.denyTexts.Unavailable == nil {
+		o.denyTexts.Unavailable = unavailableDenyReason
 	}
 	// 合成咨询链：具名源在前、匿名源在后，各段保持注册次序——首个
 	// deny / 首个 allow 的来源归属依赖此次序。空源登记告警并跳过。

@@ -217,24 +217,38 @@ func (g *Gateway) evaluate(ctx context.Context, call ToolCall) (disposition, Bas
 	return dispositionConfirm, basisBaseline, ""
 }
 
-// defaultDenyText 是人工拒绝时返回给模型的默认文案；含"不得重试"指令。
+// DenyTexts 定制各类拒绝时返回给模型的文案。零值字段使用库默认文案
+// （英文，含"不得重试"指令），自定义文案须自行保留该约束。
+type DenyTexts struct {
+	// HumanDenied 人工拒绝（Decide 结算）的文案；live 与 recovery 路径一致。
+	HumanDenied func(call ToolCall) string
+	// TierDisabled 层级 deny 或策略 deny 判定拒绝的文案。
+	TierDisabled func(toolName string) string
+	// Canceled 运行取消或超时结算拒绝的文案。
+	Canceled string
+	// PersistFailed 待确认指针持久化失败结算拒绝的文案。
+	PersistFailed string
+	// Unavailable 恢复路径代执行时工具不可用/失败的文案；detail 为具体原因。
+	Unavailable func(toolName, detail string) string
+}
+
+// defaultDenyText 是人工拒绝的默认文案；含"不得重试"指令。
 func defaultDenyText(call ToolCall) string {
-	return fmt.Sprintf("用户已拒绝执行工具 %s，不要再次调用该工具", call.ToolName)
+	return fmt.Sprintf("User denied the execution of tool %s. Do not call this tool again.", call.ToolName)
 }
 
-// tierDenyReason 是层级 deny 或策略 deny 判定拒绝时返回给模型的固定文案。
+// tierDenyReason 是层级 deny 或策略 deny 判定拒绝的默认文案。
 func tierDenyReason(toolName string) string {
-	return fmt.Sprintf("工具 %s 被许可层级或策略判定禁用，不要再次调用该工具", toolName)
+	return fmt.Sprintf("Tool %s is disabled by the permission tier or policy. Do not call this tool again.", toolName)
 }
 
-// 运行终止与持久化失败属操作性失败，不走 WithDenyText 定制，
-// 文案同样包含"不得重试"指令。
+// 运行终止与持久化失败属操作性失败，默认文案同样包含"不得重试"指令。
 const (
-	cancelDenyReason  = "运行已取消或超时，工具未执行，不要再次调用该工具"
-	persistDenyReason = "确认请求持久化失败，工具未执行，不要再次调用该工具"
+	cancelDenyReason  = "The run was canceled or timed out; the tool was not executed. Do not call this tool again."
+	persistDenyReason = "Persisting the pending confirmation failed; the tool was not executed. Do not call this tool again."
 )
 
-// unavailableDenyReason 是恢复路径代执行时工具不可用/失败的拒绝文案。
+// unavailableDenyReason 是恢复路径工具不可用/失败的默认文案。
 func unavailableDenyReason(toolName, detail string) string {
-	return fmt.Sprintf("工具 %s 不可用（%s），未执行，不要再次调用该工具", toolName, detail)
+	return fmt.Sprintf("Tool %s is unavailable (%s); it was not executed. Do not call this tool again.", toolName, detail)
 }

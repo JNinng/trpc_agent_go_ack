@@ -101,22 +101,22 @@ func (g *Gateway) settleRecovered(ctx context.Context, uid, decidedBy string, d 
 // 输出模型期望的工具消息内容。仅在恢复路径使用。
 func (g *Gateway) materializeToolResult(ctx context.Context, toolName string, args []byte, approved bool) string {
 	if !approved {
-		return deniedContent(toolName, g.opts.denyText(ToolCall{ToolName: toolName}))
+		return deniedContent(toolName, g.opts.denyTexts.HumanDenied(ToolCall{ToolName: toolName}))
 	}
 	if g.opts.tools == nil {
-		return deniedContent(toolName, unavailableDenyReason(toolName, "未配置工具解析器"))
+		return deniedContent(toolName, g.opts.denyTexts.Unavailable(toolName, "no tool resolver configured"))
 	}
 	t, ok := g.opts.tools(ctx)[toolName]
 	if !ok {
-		return deniedContent(toolName, unavailableDenyReason(toolName, "裁决时刻未注册该工具"))
+		return deniedContent(toolName, g.opts.denyTexts.Unavailable(toolName, "tool not registered at decision time"))
 	}
 	res, err := t.Call(ctx, args)
 	if err != nil {
-		return deniedContent(toolName, unavailableDenyReason(toolName, "执行失败: "+err.Error()))
+		return deniedContent(toolName, g.opts.denyTexts.Unavailable(toolName, "call failed: "+err.Error()))
 	}
 	b, err := json.Marshal(res)
 	if err != nil {
-		return deniedContent(toolName, unavailableDenyReason(toolName, "结果序列化失败: "+err.Error()))
+		return deniedContent(toolName, g.opts.denyTexts.Unavailable(toolName, "failed to marshal result: "+err.Error()))
 	}
 	return string(b)
 }

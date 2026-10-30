@@ -100,7 +100,7 @@ func main() {
 | `WithGrants(gs)` | 许可源 | nil（许可永不命中，Remember 忽略） |
 | `WithTools(res)` / `WithStaticTools(ts...)` | 工具解析器，恢复路径代执行用；缺省时同意的孤儿确认降级为拒绝 | nil |
 | `WithPermissionObserver(ob)` | 授权终态观察者，供宿主审计 | nil |
-| `WithDenyText(fn)` | 人工拒绝文案；须自行保留"不得重试"指令 | 默认文案 |
+| `WithDenyTexts(t)` | 各类拒绝文案定制（人工拒绝 / 层级与策略拒绝 / 取消 / 持久化失败 / 工具不可用，见 `DenyTexts`）；自定义须自行保留"不得重试"指令 | 全部默认（英文） |
 | `WithLogger(l)` | 结构化日志器 | `slog.Default()` |
 | `gw.Bind(r)` | 注入续跑 runner，启用恢复路径 | 未 Bind → `ErrNotBound` |
 
