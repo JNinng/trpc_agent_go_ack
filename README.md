@@ -6,6 +6,7 @@
 - **策略源**：外部裁决系统（如风控）在每次调用时介入，可强制确认、背书降级或直接拒绝；
 - **许可**：用户预先授予的授权（会话级/全局级）自动满足确认要求，决定时勾选"记住"即可生成；
 - **人工确认全生命周期**：运行存活时阻塞唤醒（live 路径），服务重启后孤儿确认经会话历史软恢复续跑（recovery 路径）；
+- **授权终态观察**：全部自动放行/拒绝终态经回调外报宿主审计，人工决定归宿主 Decide 路由；
 - **HTTP 绑定**：确认决定/查询路由可挂载到任意 `http.ServeMux`。
 
 完整设计（评估管线、事件契约、不变量、部署约束）见 [docs/module_design.md](./docs/module_design.md)。
@@ -74,6 +75,9 @@ gw := ack.New(svc,
     ack.WithPolicies(riskControl),         // 可选：策略源链
     ack.WithGrants(ack.MemoryGrants()),    // 业务可换自有存储
     ack.WithStaticTools(readNote, deleteNote),
+    ack.WithPermissionObserver(func(ctx context.Context, e ack.PermissionEvent) {
+        log.Println("permission settled", e.Call.ToolName, e.Basis) // 可选：终态外报
+    }),
 )
 
 r := aguirunner.New(coreRunner,
