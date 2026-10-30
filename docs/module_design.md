@@ -1,5 +1,7 @@
 # ack 模块设计
 
+> 文档导航：接入与配置见 [usage.md](./usage.md)，实现原理与机制图解见 [mechanism.md](./mechanism.md)。本文是设计事实来源，二者与其不一致时以本文为准。
+
 ## 1. 定位
 
 `ack` 是构建在 [trpc-agent-go](https://github.com/trpc-group/trpc-agent-go) AG-UI 协议栈之上的 Go 公共库，为 Agent 应用提供**工具调用许可**（tool permission）能力：工具按层级分类——默认允许、需人工确认、禁用；外部策略源（如风控）可在每次调用时介入裁决；用户预先授予的许可（会话级、全局级）可自动满足确认要求；仅当无任何放行依据时才阻塞等待人工决定。
@@ -324,7 +326,7 @@ func Mount(mux *http.ServeMux, g *ack.Gateway, opts ...Option) // WithPrefix(p s
 
 | 路由 | 请求 | 成功响应 | 错误 |
 | --- | --- | --- | --- |
-| `POST {p}/confirmation` | `{"threadId","confirmationId","approved","remember?"}` | `200 {"path":"live"\|"recovery"}` | 400 形状缺失；404 `ErrNotFound`；409 `ErrRunActive`；500 |
+| `POST {p}/confirmation` | `{"threadId","confirmationId","approved","remember?"}` | `200 {"path":"live"\|"recovery"}` | 400 形状缺失或 `remember` 非法；404 `ErrNotFound`；409 `ErrRunActive`；500 |
 | `GET {p}/confirmations?threadId=` | — | `200 [PendingItem]` | 400 缺 threadId；500 |
 
 `remember` 可选，取 `"session"` / `"global"`，语义同 `Decision.Remember`：同意时生成对应作用域许可，拒绝时忽略。身份从请求上下文解析：鉴权中间件将用户写入 ctx，`WithUserFunc` 从 ctx 取值；未配置动态身份时使用静态 `WithUser` 值。

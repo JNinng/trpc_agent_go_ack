@@ -9,7 +9,7 @@
 - **授权终态观察**：全部自动放行/拒绝终态经回调外报宿主审计，人工决定归宿主 Decide 路由；
 - **HTTP 绑定**：确认决定/查询路由可挂载到任意 `http.ServeMux`。
 
-完整设计（评估管线、事件契约、不变量、部署约束）见 [docs/module_design.md](./docs/module_design.md)。
+完整设计（评估管线、事件契约、不变量、部署约束）见 [docs/module_design.md](./docs/module_design.md)；接入步骤、配置项与前端对接见 [docs/usage.md](./docs/usage.md)；实现原理与机制图解见 [docs/mechanism.md](./docs/mechanism.md)。
 
 ## 仓库布局
 
@@ -20,6 +20,8 @@ ackhttp/   确认决定/查询的 HTTP 路由（仅依赖标准库与 ack）
 acktest/   测试夹具：脚本化模型、假续跑 runner
 examples/notes/   端到端示例：笔记助手（Go 后端 + Vue3 前端 ack_notes/）
 docs/module_design.md   设计文档（唯一设计事实来源）
+docs/usage.md   使用文档（接入步骤、配置项、HTTP API、前端对接、测试）
+docs/mechanism.md   原理机制文档（实现视角，含图解）
 ```
 
 ## 快速开始（示例）
