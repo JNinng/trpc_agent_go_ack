@@ -163,5 +163,5 @@ trpc.group/trpc-go/trpc-agent-go/session/postgres v1.11.0 h1:k6a6Sa9i2mjlLVZVmRn
 trpc.group/trpc-go/trpc-agent-go/session/postgres v1.11.0/go.mod h1:f8iE70qCVVnXE/ECpMzSbtYwLcwE7oFGrXK37wit/M4=
 trpc.group/trpc-go/trpc-agent-go/storage/postgres v0.8.0 h1:8phxJucSgwhdhS0UP6uyaVtWyNL3z1RW7OfLHYUtzco=
 trpc.group/trpc-go/trpc-agent-go/storage/postgres v0.8.0/go.mod h1:q1/qPdLQ8hgyGhvq2t0lmfhRcekm0chBc5+ZI32pBv0=
-trpc.group/trpc-go/trpc-mcp-go v0.0.10 h1:kKPfevmikMojfOgtUBf5SJQ/v6aDugckodgyH1uDu2Q=
-trpc.group/trpc-go/trpc-mcp-go v0.0.10/go.mod h1:OT6rLglkdaQ17D2T1Y87Y/ckItzdsEldDbw7dHAbGEA=
+trpc.group/trpc-go/trpc-mcp-go v0.0.19 h1:i7LZgjHNs4YhOvSN3jN4VZOAkCgDJbcNfcCHIs1J5Hw=
+trpc.group/trpc-go/trpc-mcp-go v0.0.19/go.mod h1:OT6rLglkdaQ17D2T1Y87Y/ckItzdsEldDbw7dHAbGEA=
