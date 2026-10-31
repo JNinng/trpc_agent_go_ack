@@ -1,7 +1,7 @@
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
-github.com/JNinng/trpc-mcp-go v0.0.19-1 h1:79z3Vc7GJf4yIrmVnaXfUK6r/OBiGkS95qF5GlSMmb0=
-github.com/JNinng/trpc-mcp-go v0.0.19-1/go.mod h1:OT6rLglkdaQ17D2T1Y87Y/ckItzdsEldDbw7dHAbGEA=
+github.com/JNinng/trpc-mcp-go v0.0.19-3 h1:fQdz6FS1KV4754l4YLwlW3j8sp7lZpy8UrhSq1CLTD8=
+github.com/JNinng/trpc-mcp-go v0.0.19-3/go.mod h1:OT6rLglkdaQ17D2T1Y87Y/ckItzdsEldDbw7dHAbGEA=
 github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260514093510-e9e910b230b9 h1:DQFhA6IAPabs7cQ/Ryv1DfhfnGQ5cZLCBtf8YRqx2FY=
 github.com/ag-ui-protocol/ag-ui/sdks/community/go v0.0.0-20260514093510-e9e910b230b9/go.mod h1:ERAMOexUee4AIuoxksuuGoEcHl3aqLwaazjGwlR9ZCI=
 github.com/bmatcuk/doublestar/v4 v4.9.1 h1:X8jg9rRZmJd4yRy7ZeNDRnM+T3ZfHv15JiBJ/avrEXE=
@@ -165,5 +165,3 @@ trpc.group/trpc-go/trpc-agent-go/session/postgres v1.11.0 h1:k6a6Sa9i2mjlLVZVmRn
 trpc.group/trpc-go/trpc-agent-go/session/postgres v1.11.0/go.mod h1:f8iE70qCVVnXE/ECpMzSbtYwLcwE7oFGrXK37wit/M4=
 trpc.group/trpc-go/trpc-agent-go/storage/postgres v0.8.0 h1:8phxJucSgwhdhS0UP6uyaVtWyNL3z1RW7OfLHYUtzco=
 trpc.group/trpc-go/trpc-agent-go/storage/postgres v0.8.0/go.mod h1:q1/qPdLQ8hgyGhvq2t0lmfhRcekm0chBc5+ZI32pBv0=
-trpc.group/trpc-go/trpc-mcp-go v0.0.19 h1:i7LZgjHNs4YhOvSN3jN4VZOAkCgDJbcNfcCHIs1J5Hw=
-trpc.group/trpc-go/trpc-mcp-go v0.0.19/go.mod h1:OT6rLglkdaQ17D2T1Y87Y/ckItzdsEldDbw7dHAbGEA=

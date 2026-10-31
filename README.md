@@ -102,7 +102,7 @@ ackhttp.Mount(mux, gw) // POST /ack/confirmation、GET /ack/confirmations
 Go 的 `replace` 只在主模块生效，本库 `go.mod` 中的 replace 不会被消费方继承，因此每个主模块需自行声明：
 
 ```bash
-go mod edit -replace trpc.group/trpc-go/trpc-mcp-go=github.com/JNinng/trpc-mcp-go@v0.0.19-1
+go mod edit -replace trpc.group/trpc-go/trpc-mcp-go=github.com/JNinng/trpc-mcp-go@v0.0.19-3
 ```
 
 上游发布含该修复的版本后，删除此 replace 并升级依赖即可。
