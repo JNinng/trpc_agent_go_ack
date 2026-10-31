@@ -23,7 +23,6 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go/session/postgres"
 	"trpc.group/trpc-go/trpc-agent-go/tool"
 	mcptoolset "trpc.group/trpc-go/trpc-agent-go/tool/mcp"
-	mcp "trpc.group/trpc-go/trpc-mcp-go"
 
 	"github.com/jninng/trpc_agent_go_ack"
 	"github.com/jninng/trpc_agent_go_ack/ackhttp"
@@ -105,12 +104,6 @@ func New(ctx context.Context, cfg Config) (*App, error) {
 		ts := mcptoolset.NewMCPToolSet(
 			mcptoolset.ConnectionConfig{Transport: "streamable", ServerURL: mcpSrv.URL},
 			mcptoolset.WithName(""), // 工具集名为空则不加前缀，模型可见工具名与 function 模式一致
-			// 客户端关闭 GET SSE：上游 trpc-mcp-go（截至 v0.0.19）的
-			// streamable 客户端中，GET SSE goroutine 建连期间对 sessionID
-			// 的读取与 POST 响应处理中的写入无同步，-race 下偶发数据竞争。
-			// 本示例的 MCP 用法只走 POST 工具调用，不消费服务端主动推送，
-			// 禁用后读端消失且行为不变；上游修复后移除此项。
-			mcptoolset.WithMCPOptions(mcp.WithClientGetSSEEnabled(false)),
 		)
 		if err := ts.Init(ctx); err != nil {
 			return nil, fmt.Errorf("init mcp tool set: %w", err)
