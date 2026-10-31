@@ -95,6 +95,18 @@ ackhttp.Mount(mux, gw) // POST /ack/confirmation、GET /ack/confirmations
 
 前端约定：消费 `tool_confirmation` 自定义事件渲染确认卡片，决定时调用 `POST /ack/confirmation`（可携带 `remember`），重连时以待确认查询补偿孤儿状态，续跑结果经 `/agui/history` follow 流读取。事件与存储契约见设计文档 §8。
 
+### 依赖注记：trpc-mcp-go fork
+
+上游 `trpc.group/trpc-go/trpc-mcp-go` 截至 v0.0.19 的 streamable 客户端存在会话状态并发访问缺陷：GET SSE goroutine 与 POST 响应处理竞争 `sessionID` / `lastEventID`，`-race` 下偶发数据竞争。修复位于 fork `github.com/JNinng/trpc-mcp-go`（tag 为「上游基线版本 + `-N` 修补序号」）。
+
+Go 的 `replace` 只在主模块生效，本库 `go.mod` 中的 replace 不会被消费方继承，因此每个主模块需自行声明：
+
+```bash
+go mod edit -replace trpc.group/trpc-go/trpc-mcp-go=github.com/JNinng/trpc-mcp-go@v0.0.19-1
+```
+
+上游发布含该修复的版本后，删除此 replace 并升级依赖即可。
+
 ## 测试
 
 ```bash
