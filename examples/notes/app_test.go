@@ -645,11 +645,11 @@ func mustJSON(v any) string {
 
 // ---- MCP 工具模式 ----
 //
-// 以下测试把同一批场景在 NOTES_TOOL_MODE=mcp 下重放：工具经进程内
-// MCP server（streamable HTTP）执行，ack 许可网关的层级评估、人工
-// 确认、remember 许可与恢复路径代执行对 MCP 工具与 function 工具
-// 行为一致。差异仅在工具执行结果的外层形状：MCP 结果包裹为文本内
-// 容数组（如 [{"type":"text","text":"{\"deleted\":true,...}"}]），
+// 以下测试把同一批场景在 MCP 工具模式（ToolMode "mcp"，对应 -mcp 标记）
+// 下重放：工具经进程内 MCP server（streamable HTTP）执行，ack 许可网关
+// 的层级评估、人工确认、remember 许可与恢复路径代执行对 MCP 工具与
+// function 工具行为一致。差异仅在工具执行结果的外层形状：MCP 结果
+// 包裹为文本内容数组（如 [{"type":"text","text":"{\"deleted\":true,...}"}]），
 // 而拒绝结果由框架在工具边界之前合成，形状与 function 模式相同。
 
 // TestMCPModeFullScriptTiersAndRemember 在 MCP 模式下验证完整许可闭环：
