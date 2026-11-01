@@ -76,7 +76,7 @@ flowchart TB
 | ① | 业务构造网关，传入会话存储与全部配置 | [ack.go](../ack.go#L164) `New` |
 | ② | 会话存储由业务选择后端并持有生命周期，网关只使用 | [ack.go](../ack.go#L42-L45) |
 | ③ | 业务构造 AG-UI runner（包装 core runner），其返回值满足 `ResumeRunner` | [ack.go](../ack.go#L22-L24) |
-| ④ | 网关注入续跑 runner，恢复路径触发时使用，未 Bind 返回 `ErrNotBound` | [ack.go](../ack.go#L208) `Bind` |
+| ④ | 网关注入续跑 runner，恢复路径触发时使用，未 Bind 返回 `ErrNotBound` | [ack.go](../ack.go#L223) `Bind` |
 | ⑤ | 网关的 `RunOptionResolver` 使每次运行挂上 `PolicyFor` 许可策略 | [policy.go](../policy.go#L48-L55) |
 | ⑥ | ackhttp 把决定/查询路由挂到宿主 mux | [ackhttp/http.go](../ackhttp/http.go#L22) `Mount` |
 
